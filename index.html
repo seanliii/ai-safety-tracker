@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 安全与合规事件追踪器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:32px 24px;border-bottom:1px solid #334155;text-align:center}
+.header h1{font-size:28px;font-weight:700;color:#f8fafc;margin-bottom:8px}
+.header p{color:#94a3b8;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:20px 24px;max-width:1200px;margin:0 auto}
+.stat-card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;text-align:center}
+.stat-card .value{font-size:28px;font-weight:700;color:#38bdf8}
+.stat-card .label{font-size:12px;color:#94a3b8;margin-top:4px}
+.stat-card.critical .value{color:#ef4444}
+.stat-card.high .value{color:#f97316}
+.stat-card.medium .value{color:#eab308}
+.controls{display:flex;flex-wrap:wrap;gap:12px;padding:0 24px 20px;max-width:1200px;margin:0 auto;align-items:center}
+.search{flex:1;min-width:200px}
+.search input{width:100%;padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px}
+.search input:focus{outline:none;border-color:#38bdf8}
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filter-btn{padding:8px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer;transition:all .2s}
+.filter-btn:hover,.filter-btn.active{background:#38bdf8;border-color:#38bdf8;color:#0f172a}
+.view-toggle{display:flex;gap:8px}
+.view-btn{padding:8px 12px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer}
+.view-btn.active{background:#38bdf8;color:#0f172a}
+.content{padding:0 24px 40px;max-width:1200px;margin:0 auto}
+/* Card view */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;cursor:pointer;transition:all .2s}
+.card:hover{border-color:#38bdf8;transform:translateY(-2px)}
+.card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:8px}
+.card-title{font-size:16px;font-weight:600;color:#f8fafc;line-height:1.4;flex:1}
+.card-date{font-size:12px;color:#64748b;white-space:nowrap}
+.card-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.tag{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:500}
+.tag.severity-critical{background:rgba(239,68,68,.2);color:#ef4444;border:1px solid rgba(239,68,68,.4)}
+.tag.severity-high{background:rgba(249,115,22,.2);color:#f97316;border:1px solid rgba(249,115,22,.4)}
+.tag.severity-medium{background:rgba(234,179,8,.2);color:#eab308;border:1px solid rgba(234,179,8,.4)}
+.tag.severity-low{background:rgba(148,163,184,.2);color:#94a3b8;border:1px solid rgba(148,163,184,.4)}
+.tag.category{background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3)}
+.tag.scope{background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
+.card-desc{font-size:14px;color:#94a3b8;line-height:1.6;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card-footer{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#64748b}
+.card-footer a{color:#38bdf8;text-decoration:none}
+.card-footer a:hover{text-decoration:underline}
+/* Timeline view */
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:#334155}
+.timeline-item{position:relative;margin-bottom:24px;padding-left:24px}
+.timeline-item::before{content:'';position:absolute;left:-20px;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid #334155;background:#0f172a}
+.timeline-item.severity-critical::before{border-color:#ef4444;background:#ef4444}
+.timeline-item.severity-high::before{border-color:#f97316;background:#f97316}
+.timeline-item.severity-medium::before{border-color:#eab308;background:#eab308}
+.timeline-item.severity-low::before{border-color:#94a3b8;background:#94a3b8}
+.timeline-date{font-size:12px;color:#64748b;margin-bottom:4px}
+.timeline-title{font-size:16px;font-weight:600;color:#f8fafc;margin-bottom:8px;cursor:pointer}
+.timeline-title:hover{color:#38bdf8}
+.timeline-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+/* Table view */
+.table-container{overflow-x:auto}
+.table{width:100%;border-collapse:collapse;font-size:14px}
+.table th{background:#1e293b;padding:12px 16px;text-align:left;font-size:12px;color:#94a3b8;text-transform:uppercase;font-weight:600;border-bottom:2px solid #334155;white-space:nowrap}
+.table td{padding:12px 16px;border-bottom:1px solid #334155;color:#e2e8f0}
+.table tr:hover td{background:rgba(56,189,248,.05)}
+.table td .tag{font-size:11px;padding:2px 8px;border-radius:20px}
+.table td a{color:#38bdf8;text-decoration:none}
+.table td a:hover{text-decoration:underline}
+.table .title-cell{font-weight:500;color:#f8fafc;cursor:pointer}
+.table .title-cell:hover{color:#38bdf8}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.active{display:flex}
+.modal{background:#1e293b;border:1px solid #334155;border-radius:16px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto}
+.modal-header{padding:20px 24px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.modal-header h2{font-size:20px;font-weight:600;color:#f8fafc;flex:1}
+.modal-close{background:none;border:none;color:#64748b;font-size:24px;cursor:pointer}
+.modal-close:hover{color:#ef4444}
+.modal-body{padding:20px 24px}
+.modal-section{margin-bottom:20px}
+.modal-section:last-child{margin-bottom:0}
+.modal-section h3{font-size:14px;color:#94a3b8;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+.modal-section p{font-size:15px;color:#e2e8f0;line-height:1.7;margin-bottom:8px}
+.modal-section .link{color:#38bdf8;text-decoration:none;word-break:break-all}
+.modal-section .link:hover{text-decoration:underline}
+.modal-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.no-results{text-align:center;padding:60px 20px;color:#64748b;font-size:16px}
+.no-results-icon{font-size:48px;margin-bottom:16px}
+.footer{text-align:center;padding:24px;color:#64748b;font-size:13px;border-top:1px solid #334155;margin-top:40px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛡️ AI 安全与合规事件追踪器</h1>
+  <p>追踪 AI 安全漏洞、政策监管、行业标准、企业合规事件</p>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="controls">
+  <div class="search">
+    <input type="text" id="searchInput" placeholder="搜索事件名称、关键词...">
+  </div>
+  <div class="filters" id="filterGroup"></div>
+  <div class="view-toggle">
+    <button class="view-btn active" data-view="cards">📋 卡片</button>
+    <button class="view-btn" data-view="timeline">📅 时间线</button>
+    <button class="view-btn" data-view="table">📊 表格</button>
+  </div>
+</div>
+
+<div class="content" id="content"></div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle"></h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="footer">
+  <p>AI Safety Tracker | 数据更新于 2026-06-30 | 持续追踪中</p>
+</div>
+
+<script>
+const data = [
+  {
+    id:1,title:"ZombieAgent: ChatGPT 提示注入漏洞升级",date:"2026-06-01",
+    category:"安全漏洞",severity:"Critical",scope:"LLM",
+    description:"安全研究人员发现 OpenAI 的 ChatGPT 服务存在多个提示注入漏洞，可导致个人信息泄露。ZombieAgent 是此前 ShadowLeak 攻击的升级版本，攻击者利用 AI 模型无法区分系统指令和用户输入的弱点。",
+    keyInfo:["漏洞类型: 提示注入 (Prompt Injection)","攻击向量: 系统指令混淆","影响范围: ChatGPT 全用户","危害等级: 个人信息泄露","修复状态: 部分修复，问题持续恶化","首次发现: 2026年6月初"],
+    source:["https://net.zhiding.cn/network_security_zone/2026/0121/3177374.shtml"]
+  },
+  {
+    id:2,title:"GA/T2380-2026: 数据安全独立纳入等保框架",date:"2026-06-01",
+    category:"行业标准",severity:"Medium",scope:"基础设施",
+    description:"GA/T2380-2026 标准于2026年6月1日正式实施，首次将数据安全作为独立体系纳入等保框架，标志从系统安全转向系统与数据安全并重。关键要求包括数据分级需从文档落到存储层、微隔离强调东西向流量管控、特权账号审计全程留痕。",
+    keyInfo:["标准编号: GA/T2380-2026","实施日期: 2026年6月1日","核心变化: 数据安全独立纳入等保","数据分级: 从文档落到存储层","微隔离: 东西向流量管控","审计要求: 全程留痕并隔离存储"],
+    source:["https://www.chinaz.com/tags/859296.shtml"]
+  },
+  {
+    id:3,title:"360发布《AI Agent 攻防演练指南2026版》",date:"2026-06-03",
+    category:"行业标准",severity:"High",scope:"Agent框架",
+    description:"360数字安全集团正式发布《AI Agent 攻防演练指南2026版》，围绕 AI Agent 场景下的资产盘点、漏洞发现、Skills 检测、监测响应与闭环整改，提出 AI 时代防守关键在于风险前置。",
+    keyInfo:["发布机构: 360数字安全集团","覆盖范围: AI Agent 全场景","核心方法: 资产盘点+漏洞发现+Skills检测","关键理念: AI时代防守=风险前置","应用场景: 企业AI Agent部署安全","配套工具: 攻防演练平台"],
+    source:["http://finance.ce.cn/home/jrzq/dc/202606/t20260603_3008225.shtml"]
+  },
+  {
+    id:4,title:"OpenClaw 3万+实例无认证暴露",date:"2026-06-07",
+    category:"安全漏洞",severity:"Critical",scope:"基础设施",
+    description:"OpenClaw 生态评测（CSDN 2026-06-07）揭露严重安全问题：3万+实例无认证暴露在互联网上，Heartbeat + Cron 每30分钟持续烧 Token，导致大规模资源浪费和安全风险。",
+    keyInfo:["暴露实例: 3万+ 无认证暴露","风险类型: 未授权访问","资源浪费: Heartbeat+Cron每30分钟烧Token","影响范围: OpenClaw 全球部署实例","安全建议: 立即启用认证+防火墙","发现来源: CSDN生态评测2026-06-07"],
+    source:["https://blog.csdn.net/2601_94959219/article/details/161802594"]
+  },
+  {
+    id:5,title:"Black Duck 开源漏洞同比增长107%",date:"2026-06-08",
+    category:"安全漏洞",severity:"High",scope:"基础设施",
+    description:"Black Duck 2026年开源安全报告显示，开源漏洞数量同比增长107%，AI相关依赖库（模型权重、训练框架、推理引擎）成为新增漏洞高发区。报告呼吁企业建立 AI 供应链安全审计流程。",
+    keyInfo:["增长幅度: 开源漏洞同比增长107%","高风险区: AI依赖库（模型权重/训练框架/推理引擎）","建议措施: 建立AI供应链安全审计","覆盖范围: 全球开源软件生态","报告机构: Black Duck (Synopsys)","关键趋势: AI组件漏洞增速超传统软件"],
+    source:["https://blog.csdn.net/2601_94959219/article/details/161802594"]
+  },
+  {
+    id:6,title:"NVIDIA 开源 SkillSpector: AI Agent 技能安全扫描器",date:"2026-06-15",
+    category:"安全漏洞",severity:"High",scope:"Agent框架",
+    description:"NVIDIA 开源 SkillSpector 工具，扫描发现 5.2% 的 AI Agent 技能存在恶意意图，26.1% 包含漏洞。工具可自动检测 Agent Skills 中的代码注入、权限逃逸和数据泄露风险。",
+    keyInfo:["发布方: NVIDIA 开源","工具名称: SkillSpector","恶意技能比例: 5.2%","含漏洞技能比例: 26.1%","检测能力: 代码注入/权限逃逸/数据泄露","适用场景: AI Agent 技能安全审计"],
+    source:["https://juejin.cn/post/7650847475420479524"]
+  },
+  {
+    id:7,title:"AI 数据安全治理：敏感数据防泄露与合规审计",date:"2026-06-16",
+    category:"企业合规",severity:"High",scope:"数据隐私",
+    description:"2026年 AI 数据安全治理报告发布，系统分析 AI 智能体场景下的数据安全风险。基于悬镜灵境 AIDR 实践，提出覆盖 '数据识别-流转监控-输出脱敏-合规审计' 的全链路防护方案。",
+    keyInfo:["核心风险: 模型记忆泄露+用户隐私泄露","防护方案: 数据识别-流转监控-输出脱敏-合规审计","实践案例: 悬镜灵境 AIDR","监管趋势: 多国纳入专项检查范围","关键场景: AI Agent 业务数据处理","合规要点: 动态加密+异常操作预警"],
+    source:["https://blog.csdn.net/weixin_64810147/article/details/160363642"]
+  },
+  {
+    id:8,title:"Anthropic 发布递归自我改进风险预警",date:"2026-06-21",
+    category:"安全漏洞",severity:"High",scope:"Agent框架",
+    description:"Anthropic 发布重磅风险预警，指出递归自我改进 AI 系统可能产生不可预测的行为偏离。预警建议建立 '能力评估-安全边界-人工审核' 三层防护机制，防止 AI 系统自主升级脱离人类控制。",
+    keyInfo:["发布方: Anthropic","风险类型: 递归自我改进失控","核心建议: 能力评估+安全边界+人工审核","防护层级: 三层机制","适用场景: 自主学习和升级的 AI 系统","预警级别: 行业级重磅发布"],
+    source:["https://blog.csdn.net/2401_84289488/article/details/161778261"]
+  },
+  {
+    id:9,title:"美国政府拟入股头部 AI 企业",date:"2026-06-21",
+    category:"政策监管",severity:"High",scope:"基础设施",
+    description:"2026年6月21日，美国政府宣布拟入股头部 AI 企业，引发行业对 AI 产业国有化趋势的担忧。政策意图在于确保关键技术不落入非友好国家手中，但企业担忧政府干预将削弱创新能力。",
+    keyInfo:["政策主体: 美国政府","目标: 头部 AI 企业","性质: 国有化倾向","行业影响: 资本逻辑重塑","争议焦点: 国家安全 vs 创新自由","时间: 2026年6月21日发布"],
+    source:["https://blog.csdn.net/2401_84289488/article/details/161778261"]
+  },
+  {
+    id:10,title:"英伟达 Cosmos3 全模态物理 AI 开源",date:"2026-06-21",
+    category:"安全漏洞",severity:"Low",scope:"基础设施",
+    description:"英伟达物理 AI 模型 Cosmos3 正式开源，实现全模态物理 AI 全民可开发。虽然开源带来创新加速，但也引发模型滥用风险担忧——物理世界模拟能力可能被用于危险场景模拟。",
+    keyInfo:["发布方: NVIDIA","模型: Cosmos3 全模态物理 AI","开源性质: 完全开源","创新价值: 物理 AI 全民可开发","风险点: 物理世界模拟能力滥用","适用场景: 机器人/自动驾驶/仿真训练"],
+    source:["https://blog.csdn.net/2401_84289488/article/details/161778261"]
+  },
+  {
+    id:11,title:"欧盟 AI 法案高风险系统准入制生效",date:"2026-06-06",
+    category:"政策监管",severity:"Critical",scope:"LLM",
+    description:"欧盟《人工智能法案》对高风险 AI 系统（如招聘或医疗应用）实施准入制，强制内容透明度（如 AI 生成文本需带数字水印），违规处罚可达年收入4%。2025年数据显示，生成式 AI 衍生虚假信息、数据隐私侵犯等事件激增40%。",
+    keyInfo:["法规: 欧盟《人工智能法案》","生效时间: 2026年6月","适用范围: 高风险AI系统（招聘/医疗等）","强制要求: 内容透明度+数字水印","处罚力度: 最高年收入4%","数据支撑: 2025年AI相关事件激增40%"],
+    source:["https://blog.csdn.net/2501_94449311/article/details/157548761"]
+  },
+  {
+    id:12,title:"豆包(字节)计划6月下旬推进付费订阅",date:"2026-06-08",
+    category:"企业合规",severity:"Low",scope:"数据隐私",
+    description:"据36氪报道，豆包计划在2026年6月下旬正式推进付费，并加速与抖音电商等业务打通。国内 AI 应用正从 '获客优先' 进入 '能力分层与商业闭环' 阶段，用户数据隐私合规成为付费前提。",
+    keyInfo:["企业: 字节跳动（豆包）","时间: 2026年6月下旬","策略: 付费订阅+电商打通","数据合规: 付费前提条件","行业趋势: 从获客优先到商业闭环","监管要求: 用户数据隐私保护"],
+    source:["https://blog.csdn.net/2601_94959219/article/details/161802594"]
+  },
+  {
+    id:13,title:"企业数据安全：从风险评估到落地的完整指南",date:"2026-06-27",
+    category:"企业合规",severity:"Medium",scope:"数据隐私",
+    description:"2026年企业数据安全方案完整指南发布，梳理企业常见的数据安全威胁类型、适用场景和落地路径。加上 AI 技术普及，企业面临大模型训练数据管控、AI 生成内容溯源等新问题。",
+    keyInfo:["核心威胁: 黑客攻击+数据泄露+AI训练数据管控","法规基础: 《数据安全法》《个人信息保护法》","AI新问题: 大模型训练数据管控+生成内容溯源","适用对象: 企业决策者和安全负责人","指南范围: 风险评估到落地全链路","发布时间: 2026年6月27日"],
+    source:["https://www.cnblogs.com/huaxumedia/p/20161151"]
+  },
+  {
+    id:14,title:"AI 智能体数据安全风险：模型记忆泄露与隐私侵犯",date:"2026-06-16",
+    category:"企业合规",severity:"Medium",scope:"Agent框架",
+    description:"AI 智能体的数据安全风险呈现双重特征：一方面智能体可能被诱导输出训练数据中的敏感信息（模型记忆泄露）；另一方面智能体在处理业务数据时可能因权限过大而泄露用户隐私。多国监管机构已将 'AI 数据安全' 纳入专项检查范围。",
+    keyInfo:["风险一: 模型记忆泄露（训练数据敏感信息）","风险二: 用户隐私泄露（业务数据权限过大）","监管趋势: 多国纳入专项检查","防护方案: 数据识别-流转监控-输出脱敏-合规审计","实践案例: 悬镜灵境 AIDR","关键建议: 最小权限原则+数据脱敏"],
+    source:["https://blog.csdn.net/weixin_64810147/article/details/160363642"]
+  },
+  {
+    id:15,title:"2026 AI 法规更新：软件测试从业者策略大调整",date:"2026-06-06",
+    category:"政策监管",severity:"Medium",scope:"LLM",
+    description:"2026年 AI 法规更新要求软件测试从业者进行策略大调整。法规明确企业对开源 AI 工具的数据泄露承担连带责任，测试案例必须覆盖数据外发权限、动态加密和异常操作预警。",
+    keyInfo:["法规: 《人工智能系统可测试性认证管理办法》","企业责任: 开源AI工具数据泄露承担连带责任","测试要求: 数据外发权限+动态加密+异常预警","欧盟AI法案: 高风险系统准入制","透明度: AI生成文本需带数字水印","处罚: 最高年收入4%"],
+    source:["https://blog.csdn.net/2501_94449311/article/details/157548761"]
+  }
+];
+
+const categories = ['全部','安全漏洞','政策监管','行业标准','企业合规'];
+const scopes = ['全部','LLM','Agent框架','基础设施','数据隐私'];
+const severities = {'Critical':'严重','High':'高危','Medium':'中危','Low':'低危'};
+
+let currentView = 'cards';
+let currentCategory = '全部';
+let currentScope = '全部';
+let searchQuery = '';
+
+function init(){
+  renderStats();
+  renderFilters();
+  bindEvents();
+  renderContent();
+}
+
+function renderStats(){
+  const total = data.length;
+  const vuln = data.filter(d=>d.category==='安全漏洞').length;
+  const policy = data.filter(d=>d.category==='政策监管').length;
+  const standard = data.filter(d=>d.category==='行业标准').length;
+  const compliance = data.filter(d=>d.category==='企业合规').length;
+  const criticalHigh = data.filter(d=>d.severity==='Critical'||d.severity==='High').length;
+  const dates = data.map(d=>new Date(d.date));
+  const latest = new Date(Math.max(...dates));
+  const latestStr = latest.toLocaleDateString('zh-CN',{month:'short',day:'numeric'});
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="value">${total}</div><div class="label">追踪事件</div></div>
+    <div class="stat-card critical"><div class="value">${vuln}</div><div class="label">安全漏洞</div></div>
+    <div class="stat-card high"><div class="value">${policy}</div><div class="label">政策监管</div></div>
+    <div class="stat-card medium"><div class="value">${standard}</div><div class="label">行业标准</div></div>
+    <div class="stat-card"><div class="value">${compliance}</div><div class="label">企业合规</div></div>
+    <div class="stat-card critical"><div class="value">${criticalHigh}</div><div class="label">严重/高危</div></div>
+  `;
+}
+
+function renderFilters(){
+  const catBtns = categories.map(c=>`<button class="filter-btn ${currentCategory===c?'active':''}" data-filter="cat" data-value="${c}">${c}</button>`).join('');
+  const scopeBtns = scopes.map(s=>`<button class="filter-btn ${currentScope===s?'active':''}" data-filter="scope" data-value="${s}">${s}</button>`).join('');
+  document.getElementById('filterGroup').innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="font-size:12px;color:#64748b">分类:</span>'+catBtns+'</div><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="font-size:12px;color:#64748b">范围:</span>'+scopeBtns+'</div>';
+}
+
+function getFilteredData(){
+  return data.filter(d=>{
+    if(currentCategory!=='全部'&&d.category!==currentCategory) return false;
+    if(currentScope!=='全部'&&d.scope!==currentScope) return false;
+    if(searchQuery){
+      const q = searchQuery.toLowerCase();
+      return d.title.toLowerCase().includes(q)||d.description.toLowerCase().includes(q)||d.scope.toLowerCase().includes(q)||d.category.toLowerCase().includes(q);
+    }
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+}
+
+function renderContent(){
+  const filtered = getFilteredData();
+  if(filtered.length===0){
+    document.getElementById('content').innerHTML = '<div class="no-results"><div class="no-results-icon">🔍</div>未找到匹配的事件</div>';
+    return;
+  }
+  if(currentView==='cards') renderCards(filtered);
+  else if(currentView==='timeline') renderTimeline(filtered);
+  else renderTable(filtered);
+}
+
+function renderCards(items){
+  document.getElementById('content').innerHTML = '<div class="cards">'+items.map(d=>`
+    <div class="card" onclick="openModal(${d.id})">
+      <div class="card-header"><div class="card-title">${d.title}</div><div class="card-date">${d.date}</div></div>
+      <div class="card-meta">
+        <span class="tag severity-${d.severity.toLowerCase()}">${severities[d.severity]}</span>
+        <span class="tag category">${d.category}</span>
+        <span class="tag scope">${d.scope}</span>
+      </div>
+      <div class="card-desc">${d.description}</div>
+      <div class="card-footer"><span>${d.keyInfo.length} 项关键信息</span><a href="${d.source[0]}" target="_blank" onclick="event.stopPropagation()">查看来源 &rarr;</a></div>
+    </div>
+  `).join('')+'</div>';
+}
+
+function renderTimeline(items){
+  document.getElementById('content').innerHTML = '<div class="timeline">'+items.map(d=>`
+    <div class="timeline-item severity-${d.severity.toLowerCase()}">
+      <div class="timeline-date">${d.date}</div>
+      <div class="timeline-title" onclick="openModal(${d.id})">${d.title}</div>
+      <div class="timeline-meta">
+        <span class="tag severity-${d.severity.toLowerCase()}">${severities[d.severity]}</span>
+        <span class="tag category">${d.category}</span>
+        <span class="tag scope">${d.scope}</span>
+      </div>
+      <div class="card-desc">${d.description}</div>
+    </div>
+  `).join('')+'</div>';
+}
+
+function renderTable(items){
+  document.getElementById('content').innerHTML = '<div class="table-container"><table class="table"><thead><tr><th>事件</th><th>日期</th><th>分类</th><th>严重程度</th><th>影响范围</th><th>来源</th></tr></thead><tbody>'+items.map(d=>`
+    <tr>
+      <td class="title-cell" onclick="openModal(${d.id})">${d.title}</td>
+      <td>${d.date}</td>
+      <td><span class="tag category">${d.category}</span></td>
+      <td><span class="tag severity-${d.severity.toLowerCase()}">${severities[d.severity]}</span></td>
+      <td><span class="tag scope">${d.scope}</span></td>
+      <td><a href="${d.source[0]}" target="_blank">🔗</a></td>
+    </tr>
+  `).join('')+'</tbody></table></div>';
+}
+
+function openModal(id){
+  const d = data.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('modalTitle').textContent = d.title;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-tags">
+      <span class="tag severity-${d.severity.toLowerCase()}">${severities[d.severity]}</span>
+      <span class="tag category">${d.category}</span>
+      <span class="tag scope">${d.scope}</span>
+      <span class="tag">📅 ${d.date}</span>
+    </div>
+    <div class="modal-section"><h3>事件概述</h3><p>${d.description}</p></div>
+    <div class="modal-section"><h3>关键信息</h3>${d.keyInfo.map(k=>`<p>• ${k}</p>`).join('')}</div>
+    <div class="modal-section"><h3>信息来源</h3>${d.source.map(s=>`<p><a href="${s}" class="link" target="_blank">${s}</a></p>`).join('')}</div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+function bindEvents(){
+  document.querySelectorAll('.view-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      currentView = btn.dataset.view;
+      renderContent();
+    });
+  });
+  document.getElementById('filterGroup').addEventListener('click',e=>{
+    if(e.target.classList.contains('filter-btn')){
+      const type = e.target.dataset.filter;
+      const val = e.target.dataset.value;
+      if(type==='cat') currentCategory = val;
+      else currentScope = val;
+      renderFilters();
+      renderContent();
+    }
+  });
+  document.getElementById('searchInput').addEventListener('input',e=>{
+    searchQuery = e.target.value.trim();
+    renderContent();
+  });
+  document.getElementById('modalOverlay').addEventListener('click',e=>{
+    if(e.target===document.getElementById('modalOverlay')) closeModal();
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape') closeModal();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
